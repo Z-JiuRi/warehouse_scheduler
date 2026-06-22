@@ -1,0 +1,24 @@
+{
+  "map_id": "warehouse_main",
+  "robots": [
+    {
+      "robot_id": "R1",
+      "position": [0, 0],
+      "status": "idle",
+      "enabled": true
+    },
+    {
+      "robot_id": "R2",
+      "position": [2, 0],
+      "status": "idle",
+      "enabled": true
+    },
+    {
+      "robot_id": "R3",
+      "position": [4, 0],
+      "status": "idle",
+      "enabled": true
+    }
+  ],
+  "active_blockages": []
+}

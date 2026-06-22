@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0",
+  "map": {
+    "map_id": "warehouse_main",
+    "name": "主仓库地图",
+    "width": 10,
+    "height": 10,
+    "cell_size_m": 1.0,
+    "coordinate_system": {
+      "format": "[x, y]",
+      "origin": "top_left",
+      "x_direction": "right",
+      "y_direction": "down"
+    }
+  },
+  "movement": {
+    "allow_up": true,
+    "allow_down": true,
+    "allow_left": true,
+    "allow_right": true,
+    "allow_wait": true,
+    "allow_diagonal": false,
+    "move_cost": 1.0,
+    "wait_cost": 1.0
+  },
+  "static_obstacles": [
+    {
+      "obstacle_id": "shelf_A",
+      "type": "shelf",
+      "cells": [[3, 3], [3, 4], [3, 5]]
+    },
+    {
+      "obstacle_id": "shelf_B",
+      "type": "shelf",
+      "cells": [[5, 3], [5, 4], [5, 5]]
+    },
+    {
+      "obstacle_id": "shelf_C",
+      "type": "shelf",
+      "cells": [[7, 3], [7, 4], [7, 5]]
+    }
+  ],
+  "locations": [
+    {
+      "location_id": "loading_zone",
+      "name": "装卸区",
+      "aliases": ["装卸区", "装卸A区", "loading"],
+      "type": "loading_zone",
+      "facility_cells": [[9, 9]],
+      "entry_cells": [[9, 8], [8, 9]],
+      "capacity": 2
+    },
+    {
+      "location_id": "charging_zone",
+      "name": "充电区",
+      "aliases": ["充电区", "充电站", "充电区域", "charging"],
+      "type": "charging_zone",
+      "facility_cells": [[0, 9]],
+      "entry_cells": [[0, 8], [1, 9]],
+      "capacity": 2
+    },
+    {
+      "location_id": "shelf_A_pickup",
+      "name": "货架A",
+      "aliases": ["货架A", "A货架", "shelf_A"],
+      "type": "shelf",
+      "facility_cells": [[3, 3], [3, 4], [3, 5]],
+      "entry_cells": [[2, 4], [4, 4]],
+      "capacity": 2
+    },
+    {
+      "location_id": "shelf_B_pickup",
+      "name": "货架B",
+      "aliases": ["货架B", "B货架", "shelf_B"],
+      "type": "shelf",
+      "facility_cells": [[5, 3], [5, 4], [5, 5]],
+      "entry_cells": [[4, 4], [6, 4]],
+      "capacity": 2
+    },
+    {
+      "location_id": "shelf_C_pickup",
+      "name": "货架C",
+      "aliases": ["货架C", "C货架", "shelf_C"],
+      "type": "shelf",
+      "facility_cells": [[7, 3], [7, 4], [7, 5]],
+      "entry_cells": [[6, 4], [8, 4]],
+      "capacity": 2
+    }
+  ],
+  "corridors": [
+    {
+      "corridor_id": "corridor_north",
+      "name": "北侧通道",
+      "cells": [[1, 1], [2, 1], [3, 1], [4, 1], [5, 1], [6, 1], [7, 1], [8, 1], [9, 1]]
+    },
+    {
+      "corridor_id": "corridor_south",
+      "name": "南侧通道",
+      "cells": [[0, 7], [1, 7], [2, 7], [3, 7], [4, 7], [5, 7], [6, 7], [7, 7], [8, 7], [9, 7]]
+    },
+    {
+      "corridor_id": "corridor_center",
+      "name": "中间通道",
+      "cells": [[0, 6], [1, 6], [2, 6], [3, 6], [4, 6], [5, 6], [6, 6], [7, 6], [8, 6], [9, 6]]
+    }
+  ]
+}

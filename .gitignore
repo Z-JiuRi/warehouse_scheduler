@@ -1,0 +1,34 @@
+# Python virtual environment
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# pytest cache
+.pytest_cache/
+
+# Sensitive configuration (contains real API keys)
+configs/api_config.json
+
+# matplotlib cache
+.matplotlib/
+
+# Output artifacts
+*.gif
+result.json
+output.json
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
