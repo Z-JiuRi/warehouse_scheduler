@@ -147,13 +147,14 @@ def test_closed_corridor(workflow):
     assert state is not None
     if any(tr.success for tr in state.task_results):
         # If successful, path should not use closed corridor cells
+        # corridor_north cells: x=1..5, y=1
+        closed_cells = {(x, 1) for x in range(1, 6)}
         for tr in state.task_results:
             if tr.success:
                 for p in tr.path:
-                    # corridor_north cells are y=1
-                    assert not (
-                        p.y == 1
-                    ), f"Robot {tr.robot_id} used closed corridor at ({p.x}, {p.y})"
+                    assert (p.x, p.y) not in closed_cells, (
+                        f"Robot {tr.robot_id} used closed corridor at ({p.x}, {p.y})"
+                    )
 
 
 def test_partial_execution(workflow):

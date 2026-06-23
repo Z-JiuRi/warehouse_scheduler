@@ -1,4 +1,13 @@
-"""Scheduler agent: orchestrates the end-to-end planning workflow."""
+"""Scheduler agent: orchestrates the end-to-end planning workflow.
+
+DEPRECATED as of LangGraph migration (2025-06).
+This module has been replaced by:
+  - app/orchestration/graph_nodes.py  (individual node functions)
+  - app/orchestration/graph_builder.py (StateGraph construction)
+  - app/orchestration/workflow.py     (LangGraph-powered Workflow class)
+
+Kept for reference; no active code imports it.
+"""
 
 import time
 import uuid

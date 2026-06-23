@@ -521,57 +521,60 @@ MVP 必须：
 
 ### 10.1 已确认
 
-总体采用“Agent 编排 + 确定性工具”的分层方式。
+总体采用"LangGraph 编排 + 确定性工具"的分层方式。调度流程由编译后的 `StateGraph` 驱动，每个处理阶段为独立节点函数。“Agent 编排 + 确定性工具”的分层方式。
 
 ```text
 自然语言指令
     ↓
-任务解析 Agent
+parse_instruction 节点 (TaskParserAgent)
     ↓
-结构化任务与运行时约束
+validate_and_resolve_goals 节点
     ↓
-调度编排 Agent
-    ├─ 调用单机 A* 工具
-    ├─ 调用冲突检测工具
-    └─ 有冲突时调用重规划 Agent
-            ├─ 诊断失败原因
-            ├─ 调整优先级或约束
-            └─ 重新调用时空 A*
+build_obstacles 节点
     ↓
-路径验证
+initial_plan 节点 (独立 A*，无互斥预留)
     ↓
-全部成功 / 部分成功 / 不可行
-    ↓
-指标汇总
+conflict_check 节点 (ConflictDetector)
+    ↓  ←──┐
+    ├─ 无冲突 → validate_final → compute_metrics → END
+    ├─ 有冲突 → replan_decide → apply_replan ──┘ (最多循环 3 次)
+    └─ 不可解 → partial_execution → validate_final → compute_metrics → END
 ```
 
 核心模块：
 
-- `task_parser_agent`：自然语言到结构化任务；
-- `scheduler_agent`：整体调度状态机和工具编排；
-- `replanning_agent`：结构化冲突诊断和重规划决策；
-- `astar_planner`：确定性时空 A*；
-- `conflict_detector`：顶点和交换冲突检测；
-- `reservation_table`：顶点和边预留；
-- `path_validator`：最终有效性验证；
-- `map_loader`：固定 JSON 地图加载与校验；
-- `location_resolver`：语义位置与别名解析；
-- `robot_registry`：机器人运行时位置；
-- `metrics_collector`：规划指标。
+- `app/orchestration/graph_builder.py`：`build_graph()` 构建 StateGraph，定义节点、条件路由和循环边
+- `app/orchestration/graph_nodes.py`：10 个节点函数（纯函数，State → Partial Update）
+- `app/orchestration/workflow.py`：`Workflow` 封装编译后 Graph，对外保持 PlanningState 接口
+- `app/domain/graph_state.py`：`GraphState` TypedDict（22 字段，累积字段使用 operator.add reducer）
+- `app/agents/task_parser_agent.py`：自然语言→结构化任务（LLM）
+- `app/agents/replanning_agent.py`：冲突诊断与重规划决策
+- `app/orchestration/replanning_policy.py`：执行重规划策略
+- `app/tools/astar_planner.py`：确定性时空 A*
+- `app/tools/conflict_detector.py`：顶点/交换/起点/终点冲突检测
+- `app/tools/reservation_table.py`：时空顶点和边预留表
+- `app/tools/path_validator.py`：最终路径有效性验证
+- `app/services/map_loader.py`：固定 JSON 地图加载与校验
+- `app/services/location_resolver.py`：语义位置与别名解析
+- `app/services/robot_registry.py`：机器人运行时位置
+- `app/services/metrics_collector.py`：规划指标（保留用于独立测试）
 
 ### 10.2 当前倾向
 
-- 固定地图与运行时状态拆分为 `warehouse_map.json` 和 `warehouse_runtime.json`；
+- 使用 LangGraph `StateGraph` 作为编排引擎；
+- 通过编译后的 Graph 执行全流程，每个阶段为独立纯函数节点；
 - 使用优先级规划法和预留表处理 3 至 5 台机器人；
 - 对部分执行使用有限任务子集搜索；
 - 对外提供统一结构化请求与响应，但具体 API 形式尚未确定。
+- 固定地图与运行时状态拆分为 `warehouse_map.json` 和 `warehouse_runtime.json`；
 
 ### 10.3 待确认
 
-- 编程语言和具体 Agent 框架；
-- 后端框架；
-- 是否提供 CLI、HTTP API 或 UI；
-- 模型供应商和模型调用方式；
+- 编程语言和具体 Agent 框架（当前：Python 3.9+，LangGraph 1.x）；
+- 是否替换为更高层框架（如 LangChain 全栈）；
+- 后端框架（当前：CLI）；
+- 是否提供 HTTP API 或 UI；
+- 模型供应商和模型调用方式（当前：DeepSeek via OpenAI SDK）；
 - 数据持久化方式；
 - 部署平台；
 - 监控和日志基础设施；

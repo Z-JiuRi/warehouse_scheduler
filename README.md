@@ -175,27 +175,50 @@ flowchart TD
 
 ### 已确认架构
 
-本项目采用“Agent 编排 + 确定性工具”的模块化架构。
+本项目采用 LangGraph 编排 + 确定性工具的模块化架构。调度流程由编译后的 StateGraph 驱动，每个处理阶段为独立节点函数。
 
-| 模块 | 职责 |
-|---|---|
-| 任务解析 Agent | 从自然语言提取任务、目标、优先级和封闭约束 |
-| 调度编排 Agent | 管理规划状态、工具调用和批次结果 |
-| 重规划 Agent | 根据冲突报告输出结构化重规划决策 |
-| 地图加载器 | 加载和校验固定 JSON 地图 |
-| 位置解析器 | 将名称和别名解析为语义位置与候选入口格 |
-| 时空 A* | 搜索单机器人时空路径 |
-| 预留表 | 记录高优先级机器人的顶点和边占用 |
-| 冲突检测器 | 检测顶点、交换、起点和终点冲突 |
-| 路径验证器 | 验证路径连续性、障碍、起终点和多机安全 |
-| 指标收集器 | 汇总成功率、耗时、冲突和重规划信息 |
+```text
+START
+  ↓
+parse_instruction (TaskParserAgent / LLM)
+  ↓
+validate_and_resolve_goals
+  ↓
+build_obstacles
+  ↓
+initial_plan (独立 A*)
+  ↓
+conflict_check ──→ 无冲突 ──→ validate_final ──→ compute_metrics → END
+  ↓                                   ↑
+  ├─ 有冲突 → replan_decide → apply_replan ──┘ (最多 3 次)
+  └─ 不可解 → partial_execution ──→ validate_final
+```
+
+| 模块 | 文件 | 职责 |
+|------|------|------|
+| Graph 构建器 | `app/orchestration/graph_builder.py` | build_graph() 构建 StateGraph，定义节点、条件路由和循环边 |
+| Graph 节点 | `app/orchestration/graph_nodes.py` | 10 个纯函数节点 |
+| Workflow | `app/orchestration/workflow.py` | 封装编译后 Graph，对外保持 PlanningState 接口 |
+| GraphState | `app/domain/graph_state.py` | 22 字段 TypedDict，累积字段使用 operator.add reducer |
+| 任务解析 Agent | `app/agents/task_parser_agent.py` | DeepSeek LLM 自然语言→结构化任务 |
+| 重规划 Agent | `app/agents/replanning_agent.py` | 冲突诊断与 3 级重规划决策 |
+| 重规划策略 | `app/orchestration/replanning_policy.py` | 执行重规划（预留表 + 优先级调整） |
+| 地图加载器 | `app/services/map_loader.py` | 加载和校验固定 JSON 地图 |
+| 位置解析器 | `app/services/location_resolver.py` | 名称和别名解析为语义位置与入口格 |
+| 时空 A* | `app/tools/astar_planner.py` | 搜索单机器人时空路径 |
+| 预留表 | `app/tools/reservation_table.py` | 记录高优先级机器人的顶点和边占用 |
+| 冲突检测器 | `app/tools/conflict_detector.py` | 顶点、交换、起点和终点冲突检测 |
+| 路径验证器 | `app/tools/path_validator.py` | 验证路径连续性、障碍、起终点和多机安全 |
+| 指标收集器 | `app/services/metrics_collector.py` | 汇总成功率、耗时、冲突和重规划信息 |
 
 ### 当前倾向
 
+- 使用 LangGraph StateGraph 作为编排引擎；
+- 通过编译后的 Graph 执行全流程，每个阶段为独立纯函数节点；
 - 使用优先级规划和预留表处理 3 至 5 台机器人；
 - 固定地图和运行时状态分成两个 JSON 文件；
 - 对部分执行使用有限任务子集搜索；
-- 对外提供结构化请求和响应。
+- 对外提供结构化请求和响应（当前为 CLI + Python API）。
 
 ### 待确认
 
@@ -470,6 +493,7 @@ flowchart TD
 | 数值计算 | numpy |
 | 测试框架 | pytest |
 | 包管理 | pip + venv / conda |
+| 编排引擎 | LangGraph（StateGraph + 条件路由 + 循环边） |
 | CLI | argparse（Python 标准库） |
 | 数据库 | MVP 不要求 |
 | 缓存/消息队列 | MVP 不要求 |
@@ -481,17 +505,18 @@ flowchart TD
 ```text
 warehouse_scheduler/
 ├── app/
-│   ├── domain/              # 6 个数据模型（dataclass）
+│   ├── domain/              # 7 个数据模型
 │   │   ├── map_models.py    #   WarehouseMap, Location, Corridor, StaticObstacle
 │   │   ├── runtime_models.py#   RobotState, DynamicBlockage
 │   │   ├── task_models.py   #   RobotTask, TaskBatch
 │   │   ├── path_models.py   #   TimedPosition, PathPlanResult, FailureReason
 │   │   ├── conflict_models.py#  Conflict, ConflictType
-│   │   └── planning_state.py#  PlanningState, ReplanDecision, PlanningMetrics
-│   ├── agents/              # 3 个 Agent
+│   │   ├── planning_state.py#  PlanningState, ReplanDecision, PlanningMetrics
+│   │   └── graph_state.py   #   GraphState TypedDict (LangGraph)
+│   ├── agents/              # 2 个 Agent (+ 1 废弃)
 │   │   ├── task_parser_agent.py   # DeepSeek 自然语言解析
-│   │   ├── scheduler_agent.py     # 调度编排状态机
-│   │   └── replanning_agent.py    # 冲突诊断与重规划决策
+│   │   ├── replanning_agent.py    # 冲突诊断与重规划决策
+│   │   └── scheduler_agent.py     # [已废弃] 旧调度器（保留参考）
 │   ├── tools/               # 4 个确定性工具
 │   │   ├── astar_planner.py       # 时空 A*
 │   │   ├── reservation_table.py   # 顶点/边预留表
@@ -502,8 +527,11 @@ warehouse_scheduler/
 │   │   ├── location_resolver.py   # 语义位置/别名解析
 │   │   ├── robot_registry.py      # 机器人运行时状态
 │   │   └── metrics_collector.py   # 规划指标收集
-│   ├── orchestration/       # 编排层
-│   │   ├── workflow.py            # 端到端工作流
+│   ├── orchestration/       # 编排层 (LangGraph)
+│   │   ├── workflow.py            # 端到端工作流（封装编译 Graph）
+│   │   ├── graph_builder.py       # StateGraph 构建与编译
+│   │   ├── graph_nodes.py         # 10 个节点函数
+│   │   └── replanning_policy.py   # 3 级重试策略
 │   │   └── replanning_policy.py   # 3 级重试策略
 │   ├── api/
 │   │   └── schemas.py             # Pydantic 输入/输出 Schema
@@ -527,7 +555,7 @@ warehouse_scheduler/
 ### 环境要求
 
 - Python 3.9+
-- conda 或 venv（推荐）
+- conda（推荐）或 venv
 
 ### 1. 克隆并进入项目
 
@@ -535,13 +563,23 @@ warehouse_scheduler/
 cd warehouse_scheduler
 ```
 
-### 2. 创建虚拟环境并安装依赖
+### 2. 创建/激活虚拟环境并安装依赖
 
 ```bash
-# 使用 conda（用 agentic 环境）
+# 使用 conda（推荐）
+conda create -n agentic python=3.9 -y
 conda activate agentic
+
+# 安装 LangGraph 等依赖（pip --target 方式，兼容 macOS 权限限制）
+mkdir -p .venv_packages
+pip install --target .venv_packages langgraph langgraph-checkpoint
+
+# 安装其余依赖
 pip install -r requirements.txt
 ```
+
+> **注意：** 如果 `pip install` 报 "Operation not permitted"（macOS 常见），使用 `pip install --target .venv_packages <package>` 替代。
+> 项目已在 `main.py` 和 `tests/conftest.py` 中自动将 `.venv_packages/` 加入 `sys.path`，无需手动设置 `PYTHONPATH`。
 
 ### 3. 配置 DeepSeek API Key（如需自然语言输入）
 
@@ -557,7 +595,7 @@ pip install -r requirements.txt
 
 > **注意：** 如果不需要自然语言解析，可以使用结构化 JSON 模式（`--structured`），完全不需要 API Key。
 
-### 4. 运行测试
+### 4. 运行测试（验证安装）
 
 ```bash
 python -m pytest tests/ -v
@@ -695,8 +733,25 @@ for tr in state.task_results:
 
 ## 常用命令
 
+### 环境安装
+
 ```bash
-# 运行全部测试（93 个）
+# 创建 conda 环境
+conda create -n agentic python=3.9 -y
+conda activate agentic
+
+# 安装 LangGraph（pip --target 方式，兼容 macOS）
+mkdir -p .venv_packages
+pip install --target .venv_packages langgraph langgraph-checkpoint
+
+# 安装其余依赖
+pip install -r requirements.txt
+```
+
+### 运行测试
+
+```bash
+# 全部测试（93 个）
 python -m pytest tests/ -v
 
 # 仅单元测试（80 个）
@@ -708,23 +763,106 @@ python -m pytest tests/integration/ -v
 # 运行单个测试文件
 python -m pytest tests/unit/test_astar.py -v
 
-# 带详细输出
+# 带详细错误输出
 python -m pytest tests/ -v --tb=long
 
-# 自然语言模式（需要 API Key）
-python main.py --instruct "R1前往装卸区，R2前往货架B"
+# 安静模式（仅看结果）
+python -m pytest tests/ -q
+```
 
-# 结构化模式（无需 API，离线可用）
+### 显示地图
+
+```bash
+# 显示默认地图
+python main.py --show-map
+
+# 显示自定义地图
+python main.py --show-map --map my_map.json
+```
+
+### 自然语言模式（需 DeepSeek API Key）
+
+```bash
+# 基本用法
+python main.py --instruct "R1前往装卸区，R2前往货架B，R3前往充电区"
+
+# 带临时通道封闭
+python main.py --instruct "关闭北侧通道，R1从左上角前往装卸区，R2前往充电区"
+
+# 指定起点
+python main.py --instruct "R1从[0,0]前往装卸区，R2从[2,0]前往货架A"
+
+# 保存结果为 JSON
+python main.py --instruct "R1前往装卸区，R2前往货架B" --output result.json
+
+# 禁用可视化
+python main.py --instruct "R1前往装卸区" --no-viz
+```
+
+### 结构化 JSON 模式（无需 API，离线可用）
+
+```bash
+# 从 JSON 文件运行
+python main.py --structured tasks.json
+
+# 不显示可视化
 python main.py --structured tasks.json --no-viz
 
-# 步进动画
+# 保存结果
+python main.py --structured tasks.json --output result.json --no-viz
+```
+
+### 可视化与动画
+
+```bash
+# 步进动画（逐帧播放机器人移动）
 python main.py --structured tasks.json --animate
 
-# 保存动画为 GIF
+# 导出 GIF
 python main.py --structured tasks.json --animate --save-animation output.gif
 
-# 保存规划结果为 JSON
-python main.py --structured tasks.json --output result.json --no-viz
+# 禁用可视化
+python main.py --structured tasks.json --no-viz
+```
+
+### 自定义配置
+
+```bash
+# 使用自定义地图和运行时
+python main.py \
+  --map my_map.json \
+  --runtime my_runtime.json \
+  --api-config my_api.json \
+  --instruct "R1前往装卸区"
+
+# 调整最大规划时域（默认 200）
+python main.py --structured tasks.json --max-timestep 300
+```
+
+### Python API 调用
+
+```python
+from app.orchestration.workflow import Workflow
+
+# 初始化工作流
+workflow = Workflow()
+
+# 自然语言输入
+state = workflow.run("R1前往装卸区，R2前往货架B，R3前往充电区")
+
+# 结构化输入
+state = workflow.run_structured({
+    "tasks": [
+        {"robot_id": "R1", "start": [0, 0], "goal_location_id": "loading_zone", "priority": 1},
+        {"robot_id": "R2", "start": [2, 0], "goal_location_id": "charging_zone", "priority": 2},
+    ]
+})
+
+# 查看结果
+print(f"Status: {state.status.value}")
+print(f"Success rate: {state.metrics.planning_success_rate:.1%}")
+for tr in state.task_results:
+    print(f"  {tr.robot_id}: {'OK' if tr.success else 'FAIL'} ({len(tr.path)} steps)")
 ```
 
 ## 配置说明
@@ -875,7 +1013,7 @@ MVP 当前没有数据库迁移要求。
 
 ## 路线图
 
-### ✅ 已完成：MVP
+### ✅ 已完成：MVP + LangGraph 迁移
 
 - [x] 固定 JSON 地图加载与校验
 - [x] 自然语言任务解析（DeepSeek Chat）
@@ -886,6 +1024,7 @@ MVP 当前没有数据库迁移要求。
 - [x] 部分执行（最大可行子集）
 - [x] 路径规划成功率和规划耗时
 - [x] matplotlib 可视化（静态图 + 步进动画）
+- [x] **LangGraph 编排引擎**（StateGraph + 10 节点 + 条件路由）
 - [x] 93 个测试全部通过
 
 ### 下一阶段

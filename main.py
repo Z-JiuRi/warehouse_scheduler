@@ -7,7 +7,13 @@ import json
 import argparse
 
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _project_root)
+
+# Add local vendored packages (langgraph etc.)
+_venv_packages = os.path.join(_project_root, ".venv_packages")
+if os.path.isdir(_venv_packages):
+    sys.path.insert(0, _venv_packages)
 
 from app.orchestration.workflow import Workflow
 from app.visualization.renderer import render_paths, render_step_by_step, render_summary, render_static_map
